@@ -1,5 +1,0 @@
-package pray
-
-func Init() {
-	
-}
