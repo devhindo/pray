@@ -1,52 +1,84 @@
 package main
 
 import (
-	"net"
 	"fmt"
 	"io"
 	"encoding/json"
 	"net/http"
 	"time"
+    "github.com/joho/godotenv"
+	"log"
 	"os"
 
 )
 
 func main() {
 
-	if len(os.Args) < 2 {
-		fmt.Println("Please enter a city")
-		return
-	}
-	if len(os.Args) > 2 {
-		fmt.Println("Please enter only one city")
-		return
-	}
-	
-	city := os.Args[1]
-
-	getPrayerTimes(city)
-}
-
-
-
-func getIP() string {
-	addrs, err := net.InterfaceAddrs()
+	ip, err := getIP()
 	if err != nil {
-		return fmt.Errorf("can't get device IP Address. Error: %v", err).Error()
+		fmt.Println(err)
 	}
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String()
-			}
-		}
-	}
-	return ""
+	location, err := getLocation(ip)
+    if err != nil {
+        fmt.Printf("Failed to get location. Error: %v", err)
+        return
+    }
+    fmt.Printf("Location: %s, %s", location.City, location.CountryName)
+	getPrayerTimes(location.City)
 }
 
-func getCity(ip string) string {
-	// todo get city from ip
-	return ""
+
+
+func getIP() (string, error) {
+    resp, err := http.Get("https://api.ipify.org?format=json")
+    if err != nil {
+        return "", fmt.Errorf("failed to get public IP. Error: %v", err)
+    }
+    defer resp.Body.Close()
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return "", fmt.Errorf("failed to read response body. Error: %v", err)
+    }
+    var data map[string]string
+    err = json.Unmarshal(body, &data)
+    if err != nil {
+        return "", fmt.Errorf("failed to unmarshal response body. Error: %v", err)
+    }
+    ip := data["ip"]
+    return ip, nil
+}
+
+type Location struct {
+    CountryName string `json:"country_name"`
+    City        string `json:"city"`
+}
+
+func getLocation(ip string) (*Location, error) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	accessKey := os.Getenv("ACCESS_KEY")
+
+	url := fmt.Sprintf("http://api.ipstack.com/%s?access_key=%s", ip, accessKey)
+    resp, err := http.Get(url)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get location. Error: %v", err)
+    }
+    defer resp.Body.Close()
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read response body. Error: %v", err)
+    }
+    var location Location
+    err = json.Unmarshal(body, &location)
+    if err != nil {
+        return nil, fmt.Errorf("failed to unmarshal response body. Error: %v", err)
+    }
+	fmt.Println(location)
+    return &location, nil
+
 }
 
 type PrayerTimes struct {
